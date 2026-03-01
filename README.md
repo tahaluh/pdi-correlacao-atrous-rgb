@@ -38,4 +38,4 @@ A imagem processada é salva em `saida/`.
 python main.py --input uploads/exemplo.png --output saida/exemplo_saida.png --mascara sobel_x --passo 1 --taxa-dilatacao 1 --ativacao relu
 ```
 
-Sem argumentos, `main.py` mantém o modo antigo: lê `config.json` e processa `imagens/*`.
+Sem argumentos, `main.py` lê `config.json` e processa `imagens/*`.
