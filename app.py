@@ -16,7 +16,15 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tif", "tiff"}
-MASCARAS = ["gaussiano_5x5", "box_1x10", "box_10x1", "box_10x10", "sobel_x", "sobel_y"]
+MASCARAS = [
+    "gaussiano_5x5",
+    "box_1x10",
+    "box_10x1",
+    "box_10x10",
+    "sobel_x",
+    "sobel_y",
+    "sobel_xy",
+]
 
 app = Flask(__name__)
 

@@ -13,6 +13,46 @@ def carregar_configuracao(caminho):
         return json.load(f)
 
 
+def correlacao_atrous_numpy(imagem_array, mascara, fator_normalizacao, passo, taxa_dilatacao):
+    altura_imagem, largura_imagem, _ = imagem_array.shape
+
+    altura_mascara = len(mascara)
+    largura_mascara = len(mascara[0])
+
+    altura_efetiva = (altura_mascara - 1) * taxa_dilatacao + 1
+    largura_efetiva = (largura_mascara - 1) * taxa_dilatacao + 1
+
+    altura_saida = (altura_imagem - altura_efetiva) // passo + 1
+    largura_saida = (largura_imagem - largura_efetiva) // passo + 1
+
+    if altura_saida <= 0 or largura_saida <= 0:
+        raise ValueError(
+            "Imagem pequena demais para essa combinacao de filtro/r/stride."
+        )
+
+    saida_array = np.zeros((altura_saida, largura_saida, 3), dtype=np.float32)
+
+    y_base = np.arange(altura_saida) * passo
+    x_base = np.arange(largura_saida) * passo
+
+    for j in range(altura_mascara):
+        for i in range(largura_mascara):
+            peso = mascara[j][i]
+            if peso == 0:
+                continue
+
+            y_indices = y_base + j * taxa_dilatacao
+            x_indices = x_base + i * taxa_dilatacao
+            saida_array += (
+                imagem_array[y_indices[:, None], x_indices[None, :], :] * peso
+            )
+
+    if fator_normalizacao:
+        saida_array /= fator_normalizacao
+
+    return saida_array
+
+
 def aplicar_mascara_atrous_sem_numpy(
     imagem_rgb,
     mascara,
@@ -127,41 +167,9 @@ def aplicar_mascara_atrous(
     nome_mascara=None,
 ):
     imagem_array = np.asarray(imagem_rgb, dtype=np.float32)
-    altura_imagem, largura_imagem, _ = imagem_array.shape
-
-    altura_mascara = len(mascara)
-    largura_mascara = len(mascara[0])
-
-    altura_efetiva = (altura_mascara - 1) * taxa_dilatacao + 1
-    largura_efetiva = (largura_mascara - 1) * taxa_dilatacao + 1
-
-    altura_saida = (altura_imagem - altura_efetiva) // passo + 1
-    largura_saida = (largura_imagem - largura_efetiva) // passo + 1
-
-    if altura_saida <= 0 or largura_saida <= 0:
-        raise ValueError(
-            "Imagem pequena demais para essa combinacao de filtro/r/stride."
-        )
-
-    saida_array = np.zeros((altura_saida, largura_saida, 3), dtype=np.float32)
-
-    y_base = np.arange(altura_saida) * passo
-    x_base = np.arange(largura_saida) * passo
-
-    for j in range(altura_mascara):
-        for i in range(largura_mascara):
-            peso = mascara[j][i]
-            if peso == 0:
-                continue
-
-            y_indices = y_base + j * taxa_dilatacao
-            x_indices = x_base + i * taxa_dilatacao
-            saida_array += (
-                imagem_array[y_indices[:, None], x_indices[None, :], :] * peso
-            )
-
-    if fator_normalizacao:
-        saida_array /= fator_normalizacao
+    saida_array = correlacao_atrous_numpy(
+        imagem_array, mascara, fator_normalizacao, passo, taxa_dilatacao
+    )
 
     if nome_mascara and "sobel" in nome_mascara.lower():
         saida_array = np.abs(saida_array)
@@ -195,18 +203,44 @@ def processar_arquivo(
     if ativacao not in {"relu", "identidade"}:
         raise ValueError("Ativacao deve ser 'relu' ou 'identidade'")
 
-    mascara = MASCARAS[mascara_nome]
-
     with Image.open(input_path) as img:
-        nova_imagem = aplicar_mascara_atrous(
-            img.convert("RGB"),
-            mascara["mascara"],
-            mascara["fator_normalizacao"],
-            passo,
-            taxa_dilatacao,
-            ativacao,
-            nome_mascara=mascara_nome,
-        )
+        imagem_rgb = img.convert("RGB")
+        if mascara_nome == "sobel_xy":
+            imagem_array = np.asarray(imagem_rgb, dtype=np.float32)
+            gx = correlacao_atrous_numpy(
+                imagem_array,
+                MASCARAS["sobel_x"]["mascara"],
+                MASCARAS["sobel_x"]["fator_normalizacao"],
+                passo,
+                taxa_dilatacao,
+            )
+            gy = correlacao_atrous_numpy(
+                imagem_array,
+                MASCARAS["sobel_y"]["mascara"],
+                MASCARAS["sobel_y"]["fator_normalizacao"],
+                passo,
+                taxa_dilatacao,
+            )
+            saida_array = np.sqrt(gx**2 + gy**2)
+            min_val = saida_array.min()
+            max_val = saida_array.max()
+            if max_val > min_val:
+                saida_array = (saida_array - min_val) / (max_val - min_val) * 255
+            else:
+                saida_array = np.zeros_like(saida_array)
+            saida_array = np.clip(saida_array, 0, 255).astype(np.uint8)
+            nova_imagem = Image.fromarray(saida_array, mode="RGB")
+        else:
+            mascara = MASCARAS[mascara_nome]
+            nova_imagem = aplicar_mascara_atrous(
+                imagem_rgb,
+                mascara["mascara"],
+                mascara["fator_normalizacao"],
+                passo,
+                taxa_dilatacao,
+                ativacao,
+                nome_mascara=mascara_nome,
+            )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     nova_imagem.save(output_path)

@@ -31,4 +31,10 @@ MASCARAS = {
         ],
         "fator_normalizacao": None,
     },
+    "sobel_xy": {
+        "mascara": [
+            [0],
+        ],
+        "fator_normalizacao": None,
+    },
 }
