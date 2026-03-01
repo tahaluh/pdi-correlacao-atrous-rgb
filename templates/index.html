@@ -23,6 +23,15 @@
       <input type="file" name="imagem" accept=".png,.jpg,.jpeg,.bmp,.tif,.tiff">
     </label>
 
+    <label>Ou use uma imagem de amostra
+      <select name="amostra" id="sample-select">
+        <option value="">-- selecione --</option>
+        {% for a in amostras %}
+          <option value="{{ a }}" {% if form_data.amostra == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
     <label>Máscara
       <select name="mascara" required>
         {% for m in mascaras %}
@@ -90,16 +99,27 @@
     const previewErro = document.getElementById("preview-erro");
     const previewUrlCache = document.getElementById("preview-url-cache");
     const inputNameCache = document.getElementById("input-name-cache");
+    const sampleSelect = document.getElementById("sample-select");
 
     inputImagem.addEventListener("change", async function () {
       const arquivo = this.files && this.files[0];
       if (!arquivo) {
-        previewImg.style.display = "none";
-        previewImg.removeAttribute("src");
+        if (sampleSelect.value) {
+          previewImg.src = "/imagens/" + sampleSelect.value + "?t=" + Date.now();
+          previewImg.style.display = "block";
+          previewUrlCache.value = previewImg.src;
+        } else {
+          previewImg.style.display = "none";
+          previewImg.removeAttribute("src");
+          previewUrlCache.value = "";
+        }
+        inputNameCache.value = "";
         previewErro.style.display = "none";
         previewErro.textContent = "";
         return;
       }
+
+      sampleSelect.value = "";
 
       const formData = new FormData();
       formData.append("imagem", arquivo);
@@ -127,6 +147,22 @@
         inputNameCache.value = "";
         previewErro.style.display = "block";
         previewErro.textContent = err.message;
+      }
+    });
+
+    sampleSelect.addEventListener("change", function () {
+      if (this.value) {
+        previewImg.src = "/imagens/" + this.value + "?t=" + Date.now();
+        previewImg.style.display = "block";
+        previewUrlCache.value = previewImg.src;
+        inputNameCache.value = "";
+        inputImagem.value = "";
+        previewErro.style.display = "none";
+        previewErro.textContent = "";
+      } else if (!(inputImagem.files && inputImagem.files[0])) {
+        previewImg.style.display = "none";
+        previewImg.removeAttribute("src");
+        previewUrlCache.value = "";
       }
     });
   </script>
