@@ -1,0 +1,10 @@
+services:
+  pdi-app:
+    build: .
+    container_name: pdi-app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./saida:/app/saida
+    restart: unless-stopped
