@@ -1,0 +1,6 @@
+{
+  "taxa_dilatacao": 1,
+  "passo": 1,
+  "mascara": "gaussiano_5x5",
+  "ativacao": "identidade"
+}

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PDI - Correlação Atrous</title>
+  <style>
+    body { font-family: sans-serif; margin: 24px; }
+    form { display: grid; gap: 10px; max-width: 420px; }
+    .imgs { margin-top: 20px; display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+    img { max-width: 420px; border: 1px solid #ccc; }
+    .erro { color: #b00020; margin: 10px 0; }
+    .log { margin-top: 8px; color: #2f4f4f; font-size: 14px; }
+    #preview-box { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Processamento de Imagem</h1>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="preview_url_cache" id="preview-url-cache" value="{{ preview_url or '' }}">
+    <input type="hidden" name="input_name_cache" id="input-name-cache" value="{{ input_name_cache or '' }}">
+    <label>Imagem
+      <input type="file" name="imagem" accept=".png,.jpg,.jpeg,.bmp,.tif,.tiff">
+    </label>
+
+    <label>Máscara
+      <select name="mascara" required>
+        {% for m in mascaras %}
+          <option value="{{ m }}" {% if form_data.mascara == m %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>Passo (1 a 5)
+      <input type="number" name="passo" min="1" max="5" value="{{ form_data.passo }}" required>
+    </label>
+
+    <label>Taxa de dilatação r (1 a 5)
+      <input type="number" name="taxa_dilatacao" min="1" max="5" value="{{ form_data.taxa_dilatacao }}" required>
+    </label>
+
+    <label>Ativação
+      <select name="ativacao" required>
+        <option value="relu" {% if form_data.ativacao == "relu" %}selected{% endif %}>relu</option>
+        <option value="identidade" {% if form_data.ativacao == "identidade" %}selected{% endif %}>identidade</option>
+      </select>
+    </label>
+
+    <button type="submit">Processar</button>
+  </form>
+
+  <div id="preview-box">
+    <h3>Preview do Upload</h3>
+    <img
+      id="preview-img"
+      alt="Preview da imagem selecionada"
+      {% if preview_url %}
+      src="{{ preview_url }}"
+      style="display:block;"
+      {% else %}
+      style="display:none;"
+      {% endif %}
+    >
+    <p id="preview-erro" class="erro" style="display:none;"></p>
+  </div>
+
+  {% if erro %}
+    <p class="erro">{{ erro }}</p>
+  {% endif %}
+
+  {% if original_url and resultado_url %}
+    <div class="imgs">
+      <div>
+        <h3>Antes</h3>
+        <img src="{{ original_url }}" alt="Original">
+      </div>
+      <div>
+        <h3>Depois (salvo em /saida)</h3>
+        <img src="{{ resultado_url }}" alt="Resultado">
+        {% if tempo_processamento_ms is not none %}
+          <p class="log">Tempo de processamento: {{ "%.2f"|format(tempo_processamento_ms) }} ms</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <script>
+    const inputImagem = document.querySelector('input[name="imagem"]');
+    const previewImg = document.getElementById("preview-img");
+    const previewErro = document.getElementById("preview-erro");
+    const previewUrlCache = document.getElementById("preview-url-cache");
+    const inputNameCache = document.getElementById("input-name-cache");
+
+    inputImagem.addEventListener("change", async function () {
+      const arquivo = this.files && this.files[0];
+      if (!arquivo) {
+        previewImg.style.display = "none";
+        previewImg.removeAttribute("src");
+        previewErro.style.display = "none";
+        previewErro.textContent = "";
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("imagem", arquivo);
+
+      try {
+        const resp = await fetch("/preview-upload", {
+          method: "POST",
+          body: formData
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.erro || "Erro ao gerar preview.");
+        }
+
+        previewImg.src = data.preview_url + "?t=" + Date.now();
+        previewImg.style.display = "block";
+        previewUrlCache.value = data.preview_url;
+        inputNameCache.value = data.input_name || "";
+        previewErro.style.display = "none";
+        previewErro.textContent = "";
+      } catch (err) {
+        previewImg.style.display = "none";
+        previewImg.removeAttribute("src");
+        previewUrlCache.value = "";
+        inputNameCache.value = "";
+        previewErro.style.display = "block";
+        previewErro.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>
