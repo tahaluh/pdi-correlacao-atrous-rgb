@@ -1,8 +1,9 @@
 import subprocess
 import sys
 import uuid
-from pathlib import Path
 from datetime import datetime
+import json
+from pathlib import Path
 from time import perf_counter
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
@@ -25,6 +26,7 @@ MASCARAS = [
     "sobel_x",
     "sobel_y",
     "sobel_xy",
+    "customizada",
 ]
 
 app = Flask(__name__)
@@ -73,7 +75,9 @@ def preview_upload():
     except Exception:
         return jsonify({"erro": "Nao foi possivel gerar preview."}), 400
 
-    return jsonify({"preview_url": f"/uploads/{preview_path.name}", "input_name": nome_input})
+    return jsonify(
+        {"preview_url": f"/uploads/{preview_path.name}", "input_name": nome_input}
+    )
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -92,6 +96,10 @@ def index():
         "passo": "1",
         "taxa_dilatacao": "1",
         "ativacao": "relu",
+        "custom_m": "3",
+        "custom_n": "3",
+        "custom_fator_normalizacao": "9",
+        "custom_celulas": [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
     }
 
     if request.method == "POST":
@@ -103,6 +111,11 @@ def index():
         passo = request.form.get("passo", form_data["passo"])
         taxa = request.form.get("taxa_dilatacao", form_data["taxa_dilatacao"])
         ativacao = request.form.get("ativacao", form_data["ativacao"])
+        custom_m = request.form.get("custom_m", form_data["custom_m"])
+        custom_n = request.form.get("custom_n", form_data["custom_n"])
+        custom_fator = request.form.get(
+            "custom_fator_normalizacao", form_data["custom_fator_normalizacao"]
+        )
         form_data.update(
             {
                 "amostra": amostra,
@@ -110,6 +123,9 @@ def index():
                 "passo": passo,
                 "taxa_dilatacao": taxa,
                 "ativacao": ativacao,
+                "custom_m": custom_m,
+                "custom_n": custom_n,
+                "custom_fator_normalizacao": custom_fator,
             }
         )
 
@@ -119,7 +135,11 @@ def index():
             erro = "Imagem de amostra invalida."
         elif mascara not in MASCARAS:
             erro = "Mascara invalida."
-        elif (not arquivo or not arquivo.filename) and not input_name_cache and not amostra:
+        elif (
+            (not arquivo or not arquivo.filename)
+            and not input_name_cache
+            and not amostra
+        ):
             erro = "Selecione uma imagem."
         else:
             try:
@@ -130,11 +150,53 @@ def index():
             except ValueError:
                 erro = "Passo e taxa de dilatacao devem estar entre 1 e 5."
 
+        custom_payload = None
+        if erro is None and mascara == "customizada":
+            try:
+                custom_m_i = int(custom_m)
+                custom_n_i = int(custom_n)
+                if custom_m_i <= 0 or custom_n_i <= 0:
+                    raise ValueError
+            except ValueError:
+                erro = "Para mascara customizada, m e n devem ser inteiros positivos."
+
+            if erro is None:
+                celulas = []
+                try:
+                    for i in range(custom_m_i):
+                        linha = []
+                        for j in range(custom_n_i):
+                            valor_raw = request.form.get(f"custom_cell_{i}_{j}", "1")
+                            valor = float(valor_raw)
+                            linha.append(valor)
+                        celulas.append(linha)
+                except ValueError:
+                    erro = (
+                        "Para mascara customizada, todas as celulas devem ser numericas."
+                    )
+
+                if erro is None:
+                    try:
+                        fator_i = float(custom_fator)
+                    except ValueError:
+                        erro = (
+                            "Para mascara customizada, o fator de normalizacao deve ser numerico."
+                        )
+
+                if erro is None:
+                    form_data["custom_celulas"] = celulas
+                    custom_payload = {
+                        "mascara": celulas,
+                        "fator_normalizacao": fator_i,
+                    }
+
         if erro is None:
             if arquivo and arquivo.filename:
                 base_nome = secure_filename(arquivo.filename)
                 sufixo = uuid.uuid4().hex[:8]
-                nome_input = f"{Path(base_nome).stem}_{sufixo}{Path(base_nome).suffix.lower()}"
+                nome_input = (
+                    f"{Path(base_nome).stem}_{sufixo}{Path(base_nome).suffix.lower()}"
+                )
                 input_path = UPLOAD_DIR / nome_input
                 arquivo.save(input_path)
                 input_name_cache = nome_input
@@ -172,6 +234,13 @@ def index():
                     "--ativacao",
                     ativacao,
                 ]
+                if custom_payload is not None:
+                    cmd.extend(
+                        [
+                            "--custom-mask-json",
+                            json.dumps(custom_payload),
+                        ]
+                    )
 
                 inicio = perf_counter()
                 proc = subprocess.run(cmd, capture_output=True, text=True)

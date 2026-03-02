@@ -37,4 +37,12 @@ MASCARAS = {
         ],
         "fator_normalizacao": None,
     },
+    "customizada": {
+        "mascara": [
+            [0, 1, 0],
+            [1, 0, 1],
+            [0, 1, 0],
+        ],
+        "fator_normalizacao": 4.0,
+    },
 }

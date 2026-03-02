@@ -193,6 +193,7 @@ def processar_arquivo(
     passo,
     taxa_dilatacao,
     ativacao,
+    custom_mask_data=None,
 ):
     if mascara_nome not in MASCARAS:
         raise ValueError(f"Mascara invalida: {mascara_nome}")
@@ -232,6 +233,8 @@ def processar_arquivo(
             nova_imagem = Image.fromarray(saida_array, mode="RGB")
         else:
             mascara = MASCARAS[mascara_nome]
+            if mascara_nome == "customizada" and custom_mask_data is not None:
+                mascara = custom_mask_data
             nova_imagem = aplicar_mascara_atrous(
                 imagem_rgb,
                 mascara["mascara"],
@@ -255,6 +258,10 @@ def parse_args():
     parser.add_argument("--taxa-dilatacao", type=int, help="Taxa r")
     parser.add_argument("--ativacao", choices=["relu", "identidade"], help="Ativacao")
     parser.add_argument(
+        "--custom-mask-json",
+        help="Mascara customizada em JSON: {'mascara': [[...]], 'fator_normalizacao': ...}",
+    )
+    parser.add_argument(
         "--config",
         default="config.json",
         help="Arquivo de configuracao (usado quando nao passar os parametros acima)",
@@ -273,6 +280,9 @@ def main():
         and args.taxa_dilatacao
         and args.ativacao
     ):
+        custom_mask_data = None
+        if args.custom_mask_json:
+            custom_mask_data = json.loads(args.custom_mask_json)
         processar_arquivo(
             Path(args.input_path),
             Path(args.output_path),
@@ -280,6 +290,7 @@ def main():
             args.passo,
             args.taxa_dilatacao,
             args.ativacao,
+            custom_mask_data=custom_mask_data,
         )
         return
 

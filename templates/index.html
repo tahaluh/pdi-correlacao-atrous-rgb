@@ -12,6 +12,10 @@
     .erro { color: #b00020; margin: 10px 0; }
     .log { margin-top: 8px; color: #2f4f4f; font-size: 14px; }
     #preview-box { margin-top: 20px; }
+    #custom-mask-box { display: none; border: 1px solid #ddd; padding: 10px; }
+    .custom-dims { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .custom-grid { display: grid; gap: 6px; }
+    .custom-grid input { width: 100%; box-sizing: border-box; }
   </style>
 </head>
 <body>
@@ -33,12 +37,48 @@
     </label>
 
     <label>Máscara
-      <select name="mascara" required>
+      <select name="mascara" id="mascara-select" required>
         {% for m in mascaras %}
           <option value="{{ m }}" {% if form_data.mascara == m %}selected{% endif %}>{{ m }}</option>
         {% endfor %}
       </select>
     </label>
+
+    <div id="custom-mask-box">
+      <div class="custom-dims">
+        <label>m (linhas)
+          <input type="number" id="custom-m" name="custom_m" min="1" value="{{ form_data.custom_m }}" required>
+        </label>
+        <label>n (colunas)
+          <input type="number" id="custom-n" name="custom_n" min="1" value="{{ form_data.custom_n }}" required>
+        </label>
+      </div>
+
+      <label>Fator de normalização
+        <input
+          type="number"
+          id="custom-fator"
+          name="custom_fator_normalizacao"
+          step="any"
+          value="{{ form_data.custom_fator_normalizacao }}"
+          required
+        >
+      </label>
+
+      <div id="custom-grid" class="custom-grid">
+        {% for i in range(form_data.custom_m|int) %}
+          {% for j in range(form_data.custom_n|int) %}
+            <input
+              type="number"
+              step="any"
+              name="custom_cell_{{ i }}_{{ j }}"
+              value="{{ form_data.custom_celulas[i][j] if form_data.custom_celulas and i < form_data.custom_celulas|length and j < form_data.custom_celulas[i]|length else 1 }}"
+              required
+            >
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
 
     <label>Passo (1 a 5)
       <input type="number" name="passo" min="1" max="5" value="{{ form_data.passo }}" required>
@@ -100,6 +140,74 @@
     const previewUrlCache = document.getElementById("preview-url-cache");
     const inputNameCache = document.getElementById("input-name-cache");
     const sampleSelect = document.getElementById("sample-select");
+    const mascaraSelect = document.getElementById("mascara-select");
+    const customMaskBox = document.getElementById("custom-mask-box");
+    const customM = document.getElementById("custom-m");
+    const customN = document.getElementById("custom-n");
+    const customFator = document.getElementById("custom-fator");
+    const customGrid = document.getElementById("custom-grid");
+    let customFatorFoiEditado = false;
+
+    function atualizarVisibilidadeCustom() {
+      const ativo = mascaraSelect.value === "customizada";
+      customMaskBox.style.display = ativo ? "grid" : "none";
+      for (const campo of customMaskBox.querySelectorAll("input")) {
+        campo.disabled = !ativo;
+      }
+    }
+
+    function construirGridCustom(preservarValores = true) {
+      const m = Math.max(1, parseInt(customM.value || "1", 10));
+      const n = Math.max(1, parseInt(customN.value || "1", 10));
+
+      customM.value = String(m);
+      customN.value = String(n);
+
+      const antigos = {};
+      if (preservarValores) {
+        for (const input of customGrid.querySelectorAll("input[name^='custom_cell_']")) {
+          antigos[input.name] = input.value;
+        }
+      }
+
+      customGrid.innerHTML = "";
+      customGrid.style.gridTemplateColumns = `repeat(${n}, minmax(56px, 1fr))`;
+      for (let i = 0; i < m; i++) {
+        for (let j = 0; j < n; j++) {
+          const input = document.createElement("input");
+          input.type = "number";
+          input.step = "any";
+          input.required = true;
+          input.name = `custom_cell_${i}_${j}`;
+          input.value = antigos[input.name] ?? "1";
+          customGrid.appendChild(input);
+        }
+      }
+
+      if (!customFatorFoiEditado || !customFator.value) {
+        customFator.value = String(m * n);
+      }
+    }
+
+    customFator.addEventListener("input", function () {
+      customFatorFoiEditado = true;
+    });
+
+    const mInicial = Math.max(1, parseInt(customM.value || "1", 10));
+    const nInicial = Math.max(1, parseInt(customN.value || "1", 10));
+    customFatorFoiEditado = customFator.value !== String(mInicial * nInicial);
+
+    mascaraSelect.addEventListener("change", atualizarVisibilidadeCustom);
+    customM.addEventListener("change", () => {
+      construirGridCustom(true);
+      atualizarVisibilidadeCustom();
+    });
+    customN.addEventListener("change", () => {
+      construirGridCustom(true);
+      atualizarVisibilidadeCustom();
+    });
+    construirGridCustom(true);
+    atualizarVisibilidadeCustom();
 
     inputImagem.addEventListener("change", async function () {
       const arquivo = this.files && this.files[0];
